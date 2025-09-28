@@ -61,16 +61,7 @@ on:
         required: false
         default: "us-east-1"
         type: string
-    secrets:
-      aws_access_key_id:
-        description: "Optional access key id (if not using OIDC / instance profile)"
-        required: false
-      aws_secret_access_key:
-        description: "Optional secret access key"
-        required: false
-      aws_session_token:
-        description: "Optional session token"
-        required: false
+
 
     outputs:
       version:
@@ -103,6 +94,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with: 
+          fetch-depth: 0 
+          ref: ${{ github.ref_name }}
 
       #  OIDC role
       - name: Configure AWS (OIDC)
