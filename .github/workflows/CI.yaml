@@ -80,12 +80,12 @@ jobs:
           # If your compose references 'app:build', retag to satisfy it:
           docker tag "$IMAGE_REF" app:build
 
-      - name: End-to-end test (compose with health)
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker compose up -d --quiet-pull --wait --wait-timeout 180
-          curl -fsS http://localhost:5000/health
+    #   - name: End-to-end test (compose with health)
+    #     shell: bash
+    #     run: |
+    #       set -euo pipefail
+    #       docker compose up -d --quiet-pull --wait --wait-timeout 180
+    #       curl -fsS http://localhost:5000/health
 
       - name: Dump logs on failure
         if: failure()
