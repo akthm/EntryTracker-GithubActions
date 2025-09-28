@@ -14,14 +14,14 @@ jobs:
             - name: Checkout Code
               uses: actions/checkout@v4
             
-            - name: Ensure aws & docker present
-              run: |
-                command -v aws || sudo apt-get update && sudo apt-get install -y awscli
-                docker --version
-            - name: Run and test 
-              run: |
-                docker compose up -Y 
+            # - name: Ensure aws & docker present
+            #   run: |
+            #     command -v aws || sudo apt-get update && sudo apt-get install -y awscli
+            #     docker --version
 
+                        
+            - name: unit test app
+              run: pytest -q
 
             - name: Login to ECR (uses instance profile automatically)
               env:
@@ -30,8 +30,6 @@ jobs:
                 REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
                 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REGISTRY
             
-            
-            - name: unit test app
-              run: pytest -q
-              
+
+
         
