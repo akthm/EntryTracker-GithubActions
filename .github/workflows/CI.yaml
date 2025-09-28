@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose up -d --quiet-pull --wait --wait-timeout 120
+          docker compose up -d --quiet-pull --wait --wait-timeout 180
           curl -fsS http://localhost:5000/health
 
       - name: Dump logs on failure
