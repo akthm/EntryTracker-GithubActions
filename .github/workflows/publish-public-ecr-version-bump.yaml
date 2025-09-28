@@ -12,17 +12,22 @@ on:
         required: true
         type: string
       image_local_name:
-        description: "Local image tag to retag and push"
+        description: "Local tag to retag and push"
         required: false
         default: "app:build"
         type: string
+      image_pull_ref:
+        description: "Remote image to pull (e.g., ghcr.io/owner/repo:sha-xxxx); if set, will pull + retag to image_local_name"
+        required: false
+        default: ""
+        type: string
       version:
-        description: "Optional explicit version (e.g., 0.3.7). If set, bumping is skipped."
+        description: "Explicit version (e.g., 0.3.7). If set, bumping is skipped."
         required: false
         default: ""
         type: string
       bump_version:
-        description: "If true, bump patch in VERSION file when on bump_ref"
+        description: "If true, bump patch in VERSION when on bump_ref"
         required: false
         default: true
         type: boolean
@@ -32,12 +37,12 @@ on:
         default: true
         type: boolean
       bump_ref:
-        description: "Git ref that is allowed to bump (e.g., refs/heads/main)"
+        description: "Git ref allowed to bump (e.g., refs/heads/main)"
         required: false
         default: "refs/heads/main"
         type: string
       initial_version:
-        description: "Starting version if VERSION file is missing"
+        description: "Starting version if VERSION is missing"
         required: false
         default: "0.1.0"
         type: string
@@ -52,16 +57,22 @@ on:
         default: true
         type: boolean
       aws_role_to_assume:
-        description: "Optional IAM role ARN for OIDC (leave empty if runner already has creds)"
+        description: "IAM role ARN for OIDC (leave empty if runner already has creds or using static keys)"
         required: false
         default: ""
         type: string
       aws_region_for_sts:
-        description: "Region for STS when assuming role (any region). ECR Public auth will still use us-east-1"
+        description: "Region for STS when assuming role (ECR Public login still uses us-east-1)"
         required: false
         default: "us-east-1"
         type: string
-
+    secrets:
+      aws_access_key_id:
+        required: false
+      aws_secret_access_key:
+        required: false
+      aws_session_token:
+        required: false
 
     outputs:
       version:
@@ -78,9 +89,14 @@ on:
         value: ${{ jobs.publish.outputs.image_uri_sha }}
 
 permissions:
-  id-token: write          # needed if using OIDC role
-  contents: write          # needed if commit_bump=true
+  contents: write         # needed to commit VERSION (set to read if commit_bump=false)
+  id-token: write         # needed only if using OIDC role
   actions: read
+  packages: read          # needed if pulling from GHCR in this workflow
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -92,13 +108,17 @@ jobs:
       image_uri_sha: ${{ steps.push.outputs.image_uri_sha }}
 
     steps:
-      - name: Checkout
+      - name: Checkout (branch, full history)
         uses: actions/checkout@v4
-        with: 
-          fetch-depth: 0 
+        with:
+          fetch-depth: 0
           ref: ${{ github.ref_name }}
 
-      #  OIDC role
+      - name: Mark workspace safe (self-hosted)
+        shell: bash
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Preferred: OIDC role
       - name: Configure AWS (OIDC)
         if: inputs.aws_role_to_assume != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -106,7 +126,33 @@ jobs:
           role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-region: ${{ inputs.aws_region_for_sts }}
 
- 
+      # Fallback: static keys (only if provided by caller)
+      - name: Configure AWS (static keys)
+        if: inputs.aws_role_to_assume == '' && secrets.aws_access_key_id != '' && secrets.aws_secret_access_key != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.aws_access_key_id }}
+          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+          aws-session-token: ${{ secrets.aws_session_token }}
+          aws-region: ${{ inputs.aws_region_for_sts }}
+
+      # Optional: pull the image artifact from GHCR (or another registry) and retag to image_local_name
+      - name: Login to GHCR (if pulling)
+        if: inputs.image_pull_ref != '' && startsWith(inputs.image_pull_ref, 'ghcr.io/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull & retag (if image_pull_ref set)
+        if: inputs.image_pull_ref != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "${{ inputs.image_pull_ref }}"
+          docker tag "${{ inputs.image_pull_ref }}" "${{ inputs.image_local_name }}"
+
       - name: Compute version
         id: compute_version
         shell: bash
@@ -124,7 +170,6 @@ jobs:
               echo "$ver" > VERSION
               echo "Bumped patch: $cur -> $ver"
             else
-              # No bump: read from file or fall back to initial_version
               if [[ -f VERSION ]]; then
                 ver="$(cat VERSION)"
                 echo "Using VERSION from file: $ver"
@@ -137,24 +182,42 @@ jobs:
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "VERSION=$ver" >> "$GITHUB_ENV"
 
-      - name: Commit VERSION bump
+      - name: Commit VERSION bump (rebase + retry)
         if: inputs.commit_bump == true && inputs.bump_version == true && github.ref == inputs.bump_ref && github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          BRANCH="${GITHUB_REF_NAME}"
+
           git config user.email "actions@users.noreply.github.com"
           git config user.name  "github-actions[bot]"
+
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
           git add VERSION
-          git commit -m "ci: bump version to ${VERSION}" || echo "No changes to commit"
-          git push || true
+          git commit -m "ci: bump version to ${VERSION}" || { echo "No changes to commit"; exit 0; }
+
+          for i in 1 2 3; do
+            git pull --rebase origin "$BRANCH" || true
+            if git push origin "HEAD:$BRANCH"; then
+              echo "Pushed after attempt #$i"
+              exit 0
+            fi
+            echo "Push failed (non-fast-forward). Retrying in $((i*2))s…"
+            sleep $((i*2))
+          done
+
+          echo "Failed to push after retries." >&2
+          exit 1
 
       - name: Login to Amazon ECR Public
         shell: bash
         run: |
           set -euo pipefail
-          # ECR Public auth token is fetched in us-east-1
+          # ECR Public auth token is fetched in us-east-1 (global)
           aws ecr-public get-login-password --region us-east-1 \
             | docker login --username AWS --password-stdin "public.ecr.aws/${{ inputs.public_registry_alias }}"
 
@@ -166,13 +229,9 @@ jobs:
           IMAGE="public.ecr.aws/${{ inputs.public_registry_alias }}/${{ inputs.public_ecr_repo }}"
           SHA="${GITHUB_SHA::7}"
 
-          # retag from the local build name
           docker tag "${{ inputs.image_local_name }}" "$IMAGE:v${VERSION}"
-
-          # push versioned
           docker push "$IMAGE:v${VERSION}"
 
-          # optional channel tags
           latest_uri=""
           sha_uri=""
           if [[ "${{ inputs.push_latest }}" == "true" ]]; then
