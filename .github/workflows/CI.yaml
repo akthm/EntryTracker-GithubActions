@@ -18,22 +18,17 @@ jobs:
             #   run: |
             #     command -v aws || sudo apt-get update && sudo apt-get install -y awscli
             #     docker --version
+            - uses: actions/setup-python@v5
+              with:
+                python-version: "3.12"
+                cache: "pip"
 
             - name: Ensure pytest
               run: |
-                        set -euxo pipefail
-                        python3 -m pip install --upgrade pip
-                        # If you have project deps, install them first
-                        if [[ -f requirements.txt ]]; then
-                        pip install -r requirements.txt
-                        fi
-                        if [[ -f pyproject.toml || -f setup.py ]]; then
-                        pip install -e .
-                        fi
-                        # Make sure pytest is present (and coverage if you use it)
-                        pip install --upgrade pytest pytest-cov
-                        # Sanity check
-                        python3 -m pytest --version 
+                        python -m pip install --upgrade pip
+                        if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+                        pip install -U pytest pytest-cov
+                        python -m pytest --version
 
 
             - name: unit test app
