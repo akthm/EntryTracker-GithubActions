@@ -8,7 +8,7 @@ on:
             
 jobs:
     Test-Build-e2e-publish:
-        runs-on: ubuntu-latest
+        runs-on: self-hosted
 
         steps: 
             - name: Checkout Code
