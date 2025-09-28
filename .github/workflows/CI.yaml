@@ -21,6 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Log inputs (pretty JSON)
+        shell: bash
+        env:
+            INPUTS_JSON: ${{ toJson(inputs) }}
+        run: |
+            set -euo pipefail
+            echo "::group::workflow_call inputs"
+            if command -v jq >/dev/null 2>&1; then
+            echo "$INPUTS_JSON" | jq .
+            else
+            echo "$INPUTS_JSON"
+            fi
+            echo "::endgroup::"
+
       - name: Compute IMAGE_REF (GHCR)
         id: out
         shell: bash
