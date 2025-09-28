@@ -18,21 +18,33 @@ jobs:
             #   run: |
             #     command -v aws || sudo apt-get update && sudo apt-get install -y awscli
             #     docker --version
+
             - uses: actions/setup-python@v5
               with:
                 python-version: "3.12"
                 cache: "pip"
 
-            - name: Ensure pytest
+            - name: Create venv & install deps
+              shell: bash
               run: |
-                        python -m pip install --upgrade pip
-                        if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
-                        pip install -U pytest pytest-cov
-                        python -m pytest --version
+                    set -euo pipefail
+                    python -m venv .venv
+                    # Activate for this step
+                    source .venv/bin/activate
+                    python -m pip install --upgrade pip
+                    if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+                    pip install -U pytest pytest-cov
+                    # Make venv available to subsequent steps (no need to re-activate)
+                    echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+                    # Sanity check
+                    python -c "import sys; print('Python:', sys.executable)"
+                    pytest --version
 
 
             - name: unit test app
-              run: pytest -q
+              run: | 
+                set -euo pipefail
+                pytest -q
 
 
             - name: End-to-end test (compose)
@@ -62,7 +74,9 @@ jobs:
 
             - name: Teardown stack
               if: always()
-              run: docker compose down -v --remove-orphans
+              run: | 
+               docker compose down -v --remove-orphans
+               rm -rf .venv
 
             - name: Login to ECR (uses instance profile automatically)
               env:
