@@ -12,7 +12,7 @@ env:
 # Permissions per job (least privilege)
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       packages: write     # push to GHCR
@@ -21,19 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log inputs (pretty JSON)
-        shell: bash
-        env:
-            INPUTS_JSON: ${{ toJson(inputs) }}
-        run: |
-            set -euo pipefail
-            echo "::group::workflow_call inputs"
-            if command -v jq >/dev/null 2>&1; then
-            echo "$INPUTS_JSON" | jq .
-            else
-            echo "$INPUTS_JSON"
-            fi
-            echo "::endgroup::"
+      
 
       - name: Compute IMAGE_REF (GHCR)
         id: out
@@ -68,7 +56,7 @@ jobs:
 
   test-e2e:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       packages: read      # pull from GHCR
