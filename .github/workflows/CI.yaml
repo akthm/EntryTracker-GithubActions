@@ -76,7 +76,7 @@ jobs:
 
             - name: Publish
               if: github.event_name == 'push'   # only on branch pushes
-              uses: ./.github/workflows/publish-public-ecr-version-bump.yml
+              uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
               with:
                 public_registry_alias: ${{ env.PUBLIC_REGISTRY_ALIAS }}
                 public_ecr_repo: ${{ env.PUBLIC_ECR_REPO }}
