@@ -81,7 +81,7 @@ jobs:
         run: rm -rf .venv
 
   test-e2e:
-    needs: build
+    needs: unit-test-build
     runs-on: self-hosted
 
     permissions:
