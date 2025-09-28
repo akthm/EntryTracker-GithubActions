@@ -19,6 +19,12 @@ jobs:
       image_ref: ${{ steps.out.outputs.image_ref }}
     steps:
       - uses: actions/checkout@v4
+        
+      - uses: actions/setup-python@v5
+        with:
+            python-version: "3.12"
+            cache: "pip"
+
 
       - name: Create venv & install deps
         shell: bash
@@ -146,7 +152,7 @@ jobs:
   publish:
     needs: test-e2e
     if: ${{ success() && github.event_name == 'push' }}
-    # Call your reusable workflow (see section B below)
+    
     permissions:
       contents: write      # for optional VERSION commit
       id-token: write      # for AWS OIDC (if you use it)
