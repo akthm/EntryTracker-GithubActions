@@ -12,7 +12,8 @@ services:
     ports:
       - "5000:5000"
     depends_on:
-      - mysql
+       mysql:
+          condition: "service_healthy"
     networks:
       - app_network
 
@@ -28,6 +29,13 @@ services:
       - app_network
     volumes:
       - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-$${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Give MySQL time to initialize before starting health checks
+
 
 networks:
   app_network:
