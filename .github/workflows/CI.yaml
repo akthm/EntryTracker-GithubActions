@@ -9,9 +9,8 @@ on:
 env:
   PUBLIC_REGISTRY_ALIAS: u9j9o0m9
   PUBLIC_ECR_REPO: entry-tracker
-# Permissions per job (least privilege)
 jobs:
-  build:
+  unit-test-build:
     runs-on: self-hosted
     permissions:
       contents: read
@@ -21,7 +20,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      
+      - name: Create venv & install deps
+        shell: bash
+        run: |
+            set -euo pipefail
+            python -m venv .venv
+            source .venv/bin/activate
+            python -m pip install --upgrade pip
+            if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+            pip install -U pytest pytest-cov
+            echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+            python -c "import sys; print('Python:', sys.executable)"
+            pytest --version
+
+
+      - name: unit test app
+        run: | 
+            set -euo pipefail
+            pytest -q
+
 
       - name: Compute IMAGE_REF (GHCR)
         id: out
@@ -59,6 +76,10 @@ jobs:
             echo GO =  $GITHUB_OUTPUT
             echo E - $GITHUB_ENV
 
+      - name: cleanup venv
+        if: always()
+        run: rm -rf .venv
+
   test-e2e:
     needs: build
     runs-on: self-hosted
@@ -89,13 +110,23 @@ jobs:
           # If your compose references 'app:build', retag to satisfy it:
           docker tag "$IMAGE_REF" app:build
 
-    #   - name: End-to-end test (compose with health)
-    #     shell: bash
-    #     run: |
-    #       set -euo pipefail
-    #       docker compose up -d --quiet-pull --wait --wait-timeout 180
-    #       curl -fsS http://localhost:5000/health
-    
+      - name: End-to-end test (compose with health)
+        shell: bash
+        run: |
+            set -euo pipefail
+            docker compose up -d --quiet-pull
+            for i in {1..60}; do
+            if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
+                echo "App is healthy ✅"
+                break
+            fi
+            echo "Waiting for app… ($i/60)"
+            sleep 2
+            done
+
+            # Final check (fails the step if not healthy)
+            curl -fsS http://localhost:5000
+
       - name: Set image ref output (e2e)
         id: out_image
         shell: bash
