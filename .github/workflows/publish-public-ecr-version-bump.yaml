@@ -66,13 +66,7 @@ on:
         required: false
         default: "us-east-1"
         type: string
-    secrets:
-      aws_access_key_id:
-        required: false
-      aws_secret_access_key:
-        required: false
-      aws_session_token:
-        required: false
+
 
     outputs:
       version:
@@ -126,15 +120,15 @@ jobs:
           role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-region: ${{ inputs.aws_region_for_sts }}
 
-      # Fallback: static keys (only if provided by caller)
-      - name: Configure AWS (static keys)
-        if: inputs.aws_role_to_assume == '' && secrets.aws_access_key_id != '' && secrets.aws_secret_access_key != ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.aws_access_key_id }}
-          aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
-          aws-session-token: ${{ secrets.aws_session_token }}
-          aws-region: ${{ inputs.aws_region_for_sts }}
+      # # Fallback: static keys (only if provided by caller)
+      # - name: Configure AWS (static keys)
+      #   if: inputs.aws_role_to_assume == '' && secrets.aws_access_key_id != '' && secrets.aws_secret_access_key != ''
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.aws_access_key_id }}
+      #     aws-secret-access-key: ${{ secrets.aws_secret_access_key }}
+      #     aws-session-token: ${{ secrets.aws_session_token }}
+      #     aws-region: ${{ inputs.aws_region_for_sts }}
 
       # Optional: pull the image artifact from GHCR (or another registry) and retag to image_local_name
       - name: Login to GHCR (if pulling)
