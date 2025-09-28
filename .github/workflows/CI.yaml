@@ -100,7 +100,7 @@ jobs:
       contents: write      # for optional VERSION commit
       id-token: write      # for AWS OIDC (if you use it)
       packages: read       # to pull from GHCR inside the callee
-    uses: akthm/EntryTracker-GithubActions/.github/workflows/publish-public-ecr-version-bump.yml@main
+    uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
     with:
       public_registry_alias: ${{ vars.PUBLIC_REGISTRY_ALIAS }}
       public_ecr_repo: ${{ vars.PUBLIC_ECR_REPO }}
