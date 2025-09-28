@@ -91,6 +91,6 @@ jobs:
         if: ${{ success() }}
         uses: ./.github/workflows/publish-public-ecr-version-bump.yaml  
         with:
-            public_registry_alias: ${{ env.PUBLIC_REGISTRY_ALIAS }}
-            public_ecr_repo: ${{ env.PUBLIC_ECR_REPO }}
+            public_registry_alias: u9j9o0m9
+            public_ecr_repo: entry-tracker
         secrets: inherit     
