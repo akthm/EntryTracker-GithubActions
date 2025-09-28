@@ -54,6 +54,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: log env 
+        run: |
+            echo GO =  $GITHUB_OUTPUT
+            echo E - $GITHUB_ENV
+
   test-e2e:
     needs: build
     runs-on: self-hosted
@@ -108,8 +113,8 @@ jobs:
       actions: read
     uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
     with:
-      public_registry_alias: ${{ vars.PUBLIC_REGISTRY_ALIAS }}
-      public_ecr_repo: ${{ vars.PUBLIC_ECR_REPO }}
+      public_registry_alias: u9j9o0m9
+      public_ecr_repo: entry-tracker
       image_local_name: app:build
       image_pull_ref: ${{ needs.build.outputs.image_ref }}   # <— NEW: tell callee to pull & retag
       bump_version: true
