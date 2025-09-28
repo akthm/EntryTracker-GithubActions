@@ -89,6 +89,11 @@ jobs:
     publish:
         needs: Test-Build-e2e
         if: ${{ success() }}
+        permissions:
+            contents: write     # needed for committing VERSION
+            id-token: write     # needed for OIDC (aws-actions/configure-aws-credentials)
+            actions: read       # only if your callee requests it
+
         uses: ./.github/workflows/publish-public-ecr-version-bump.yaml  
         with:
             public_registry_alias: u9j9o0m9
