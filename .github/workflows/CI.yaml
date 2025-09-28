@@ -62,12 +62,15 @@ jobs:
   test-e2e:
     needs: build
     runs-on: self-hosted
+
     permissions:
       contents: read
       packages: read      # pull from GHCR
     env:
       IMAGE_REF: ${{ needs.build.outputs.image_ref }}
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}
+    outputs:
+        image_ref: ${{ steps.out_image.outputs.image_ref }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +80,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Log env
+        run: echo ${{ env.IMAGE_REF }}
       - name: Pull CI image & tag for compose
         run: |
           set -euo pipefail
@@ -91,6 +95,12 @@ jobs:
     #       set -euo pipefail
     #       docker compose up -d --quiet-pull --wait --wait-timeout 180
     #       curl -fsS http://localhost:5000/health
+    
+      - name: Set image ref output (e2e)
+        id: out_image
+        shell: bash
+        run: echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
 
       - name: Dump logs on failure
         if: failure()
