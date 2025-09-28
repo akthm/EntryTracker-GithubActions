@@ -34,6 +34,36 @@ jobs:
             - name: unit test app
               run: pytest -q
 
+
+            - name: End-to-end test (compose)
+              shell: bash
+              run: |
+                set -euo pipefail
+                docker compose up -d --quiet-pull
+
+                # Wait for the app to respond (retry up to ~2 minutes)
+                for i in {1..60}; do
+                if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
+                    echo "App is healthy ✅"
+                    break
+                fi
+                echo "Waiting for app… ($i/60)"
+                sleep 2
+                done
+
+                # Final check (fails the step if not healthy)
+                curl -fsS http://localhost:5000
+
+            - name: Dump logs on failure
+              if: failure()
+              run: |
+                docker compose ps
+                docker compose logs --no-color --timestamps
+
+            - name: Teardown stack
+              if: always()
+              run: docker compose down -v --remove-orphans
+
             - name: Login to ECR (uses instance profile automatically)
               env:
                 AWS_REGION: ap-south-1
