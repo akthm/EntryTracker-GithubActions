@@ -9,7 +9,7 @@ env:
   PUBLIC_ECR_REPO: entry-tracker
             
 jobs:
-    Test-Build-e2e-publish:
+    Test-Build-e2e:
         runs-on: self-hosted
 
         steps: 
@@ -74,17 +74,27 @@ jobs:
                docker compose down -v --remove-orphans
                rm -rf .venv
 
-            - name: Publish
-              if: github.event_name == 'push'   # only on branch pushes
-              uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
+            # - name: Publish
+            #   if: github.event_name == 'push'   # only on branch pushes
+            #   uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
+            #   with:
+            #     public_registry_alias: ${{ env.PUBLIC_REGISTRY_ALIAS }}
+            #     public_ecr_repo: ${{ env.PUBLIC_ECR_REPO }}
+            #     image_local_name: "app:build"
+            #     bump_version: true
+            #     commit_bump: true
+            #     bump_ref: "refs/heads/main"
+            #     push_latest: true
+            #     push_sha: true
+            #     aws_role_to_assume: # No need since runner has correct role
+    publish:
+        needs: Test-Build-e2e
+        if: ${{ success() }}
+        runs-on: self-hosted
+        steps:
+            - name: publish
+              uses: ./.github/workflows/publish-public-ecr-version-bump.yaml  
               with:
-                public_registry_alias: ${{ env.PUBLIC_REGISTRY_ALIAS }}
-                public_ecr_repo: ${{ env.PUBLIC_ECR_REPO }}
-                image_local_name: "app:build"
-                bump_version: true
-                commit_bump: true
-                bump_ref: "refs/heads/main"
-                push_latest: true
-                push_sha: true
-                aws_role_to_assume: # No need since runner has correct role
-        
+                public_registry_alias: your-alias
+                public_ecr_repo: entry-tracker
+                secrets: inherit   # or map specific secrets
