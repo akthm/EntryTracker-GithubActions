@@ -1,0 +1,198 @@
+name: Publish to ECR Public
+
+on:
+  workflow_call:
+    inputs:
+      public_registry_alias:
+        description: "ECR Public registry alias (e.g., abcd1234 or your custom alias)"
+        required: true
+        type: string
+      public_ecr_repo:
+        description: "ECR Public repository name (e.g., entry-tracker)"
+        required: true
+        type: string
+      image_local_name:
+        description: "Local image tag to retag and push"
+        required: false
+        default: "app:build"
+        type: string
+      version:
+        description: "Optional explicit version (e.g., 0.3.7). If set, bumping is skipped."
+        required: false
+        default: ""
+        type: string
+      bump_version:
+        description: "If true, bump patch in VERSION file when on bump_ref"
+        required: false
+        default: true
+        type: boolean
+      commit_bump:
+        description: "If true, commit the bumped VERSION back to the repo"
+        required: false
+        default: true
+        type: boolean
+      bump_ref:
+        description: "Git ref that is allowed to bump (e.g., refs/heads/main)"
+        required: false
+        default: "refs/heads/main"
+        type: string
+      initial_version:
+        description: "Starting version if VERSION file is missing"
+        required: false
+        default: "0.1.0"
+        type: string
+      push_latest:
+        description: "Also push :latest tag"
+        required: false
+        default: true
+        type: boolean
+      push_sha:
+        description: "Also push :sha-XXXXXXX tag"
+        required: false
+        default: true
+        type: boolean
+      aws_role_to_assume:
+        description: "Optional IAM role ARN for OIDC (leave empty if runner already has creds)"
+        required: false
+        default: ""
+        type: string
+      aws_region_for_sts:
+        description: "Region for STS when assuming role (any region). ECR Public auth will still use us-east-1"
+        required: false
+        default: "us-east-1"
+        type: string
+    secrets:
+      aws_access_key_id:
+        description: "Optional access key id (if not using OIDC / instance profile)"
+        required: false
+      aws_secret_access_key:
+        description: "Optional secret access key"
+        required: false
+      aws_session_token:
+        description: "Optional session token"
+        required: false
+
+    outputs:
+      version:
+        description: "Final version used (e.g., 0.3.8)"
+        value: ${{ jobs.publish.outputs.version }}
+      image_uri_versioned:
+        description: "public.ecr.aws/<alias>/<repo>:vX.Y.Z"
+        value: ${{ jobs.publish.outputs.image_uri_versioned }}
+      image_uri_latest:
+        description: "public.ecr.aws/<alias>/<repo>:latest (if pushed)"
+        value: ${{ jobs.publish.outputs.image_uri_latest }}
+      image_uri_sha:
+        description: "public.ecr.aws/<alias>/<repo>:sha-XXXXXXX (if pushed)"
+        value: ${{ jobs.publish.outputs.image_uri_sha }}
+
+permissions:
+  id-token: write          # needed if using OIDC role
+  contents: write          # needed if commit_bump=true
+  actions: read
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    outputs:
+      version: ${{ steps.compute_version.outputs.version }}
+      image_uri_versioned: ${{ steps.push.outputs.image_uri_versioned }}
+      image_uri_latest: ${{ steps.push.outputs.image_uri_latest }}
+      image_uri_sha: ${{ steps.push.outputs.image_uri_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      #  OIDC role
+      - name: Configure AWS (OIDC)
+        if: inputs.aws_role_to_assume != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
+          aws-region: ${{ inputs.aws_region_for_sts }}
+
+ 
+      - name: Compute version
+        id: compute_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.version }}" ]]; then
+            ver="${{ inputs.version }}"
+            echo "Using explicit version: $ver"
+          else
+            if [[ "${{ inputs.bump_version }}" == "true" && "${GITHUB_REF}" == "${{ inputs.bump_ref }}" ]]; then
+              [[ -f VERSION ]] || echo "${{ inputs.initial_version }}" > VERSION
+              cur="$(cat VERSION)"
+              IFS=. read -r M m p <<<"$cur"
+              ver="$M.$m.$((p+1))"
+              echo "$ver" > VERSION
+              echo "Bumped patch: $cur -> $ver"
+            else
+              # No bump: read from file or fall back to initial_version
+              if [[ -f VERSION ]]; then
+                ver="$(cat VERSION)"
+                echo "Using VERSION from file: $ver"
+              else
+                ver="${{ inputs.initial_version }}"
+                echo "VERSION file missing; using initial_version: $ver"
+              fi
+            fi
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$ver" >> "$GITHUB_ENV"
+
+      - name: Commit VERSION bump
+        if: inputs.commit_bump == true && inputs.bump_version == true && github.ref == inputs.bump_ref && github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email "actions@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          git add VERSION
+          git commit -m "ci: bump version to ${VERSION}" || echo "No changes to commit"
+          git push || true
+
+      - name: Login to Amazon ECR Public
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ECR Public auth token is fetched in us-east-1
+          aws ecr-public get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin "public.ecr.aws/${{ inputs.public_registry_alias }}"
+
+      - name: Tag & push image
+        id: push
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="public.ecr.aws/${{ inputs.public_registry_alias }}/${{ inputs.public_ecr_repo }}"
+          SHA="${GITHUB_SHA::7}"
+
+          # retag from the local build name
+          docker tag "${{ inputs.image_local_name }}" "$IMAGE:v${VERSION}"
+
+          # push versioned
+          docker push "$IMAGE:v${VERSION}"
+
+          # optional channel tags
+          latest_uri=""
+          sha_uri=""
+          if [[ "${{ inputs.push_latest }}" == "true" ]]; then
+            docker tag "${{ inputs.image_local_name }}" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+            latest_uri="$IMAGE:latest"
+          fi
+
+          if [[ "${{ inputs.push_sha }}" == "true" ]]; then
+            docker tag "${{ inputs.image_local_name }}" "$IMAGE:sha-${SHA}"
+            docker push "$IMAGE:sha-${SHA}"
+            sha_uri="$IMAGE:sha-${SHA}"
+          fi
+
+          echo "image_uri_versioned=$IMAGE:v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "image_uri_latest=$latest_uri" >> "$GITHUB_OUTPUT"
+          echo "image_uri_sha=$sha_uri" >> "$GITHUB_OUTPUT"

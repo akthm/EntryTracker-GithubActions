@@ -4,7 +4,9 @@ on:
     push:
         branches: 
             - main
-
+env:
+  PUBLIC_REGISTRY_ALIAS: u9j9o0m9
+  PUBLIC_ECR_REPO: entry-tracker
             
 jobs:
     Test-Build-e2e-publish:
@@ -14,10 +16,7 @@ jobs:
             - name: Checkout Code
               uses: actions/checkout@v4
             
-            # - name: Ensure aws & docker present
-            #   run: |
-            #     command -v aws || sudo apt-get update && sudo apt-get install -y awscli
-            #     docker --version
+
 
             - uses: actions/setup-python@v5
               with:
@@ -29,14 +28,11 @@ jobs:
               run: |
                     set -euo pipefail
                     python -m venv .venv
-                    # Activate for this step
                     source .venv/bin/activate
                     python -m pip install --upgrade pip
                     if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
                     pip install -U pytest pytest-cov
-                    # Make venv available to subsequent steps (no need to re-activate)
                     echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-                    # Sanity check
                     python -c "import sys; print('Python:', sys.executable)"
                     pytest --version
 
@@ -78,13 +74,17 @@ jobs:
                docker compose down -v --remove-orphans
                rm -rf .venv
 
-            - name: Login to ECR (uses instance profile automatically)
-              env:
-                AWS_REGION: ap-south-1
-              run: |
-                REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com
-                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REGISTRY
-            
-
-
+            - name: Publish
+              if: github.event_name == 'push'   # only on branch pushes
+              uses: ./.github/workflows/publish-public-ecr-version-bump.yml
+              with:
+                public_registry_alias: ${{ env.PUBLIC_REGISTRY_ALIAS }}
+                public_ecr_repo: ${{ env.PUBLIC_ECR_REPO }}
+                image_local_name: "app:build"
+                bump_version: true
+                commit_bump: true
+                bump_ref: "refs/heads/main"
+                push_latest: true
+                push_sha: true
+                aws_role_to_assume: # No need since runner has correct role
         
