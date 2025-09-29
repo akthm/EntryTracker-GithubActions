@@ -58,8 +58,16 @@ jobs:
           REPO=$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')
           TAG="sha-${GITHUB_SHA::7}"
           echo "IMAGE_REF=ghcr.io/${OWNER}/${REPO}:${TAG}" >> "$GITHUB_ENV"
-          echo "image_ref=ghcr.io/${OWNER}/${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
-          
+            {
+            echo "image_ref<<EOF"
+            echo "$IMAGE_REF"
+            echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
+            # debug
+            echo "Wrote to GITHUB_OUTPUT at: $GITHUB_OUTPUT"
+            cat "$GITHUB_OUTPUT"
+
       - name: Assert & log image ref
         shell: bash
         run: |
