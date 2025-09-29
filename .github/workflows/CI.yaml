@@ -16,7 +16,7 @@ jobs:
       contents: read
       packages: write     # push to GHCR
     outputs:
-      image_ref: ${{ steps.out.outputs.image_ref }}
+      image_ref: ${{ steps.compute_image.outputs.image_ref }}
     steps:
       - uses: actions/checkout@v4
 
@@ -106,7 +106,7 @@ jobs:
       contents: read
       packages: read      # pull from GHCR
     env:
-      IMAGE_REF: ${{ needs.build.outputs.image_ref }}
+      IMAGE_REF: ${{ needs.unit-test-build.outputs.image_ref }}
       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}
     outputs:
         image_ref: ${{ steps.out_image.outputs.image_ref }}
@@ -175,7 +175,7 @@ jobs:
       public_registry_alias: u9j9o0m9
       public_ecr_repo: entry-tracker
       image_local_name: app:build
-      image_pull_ref: ${{ needs.build.outputs.image_ref }}   # <— NEW: tell callee to pull & retag
+      image_pull_ref: ${{ needs.test-e2e.outputs.image_ref }}   # <— NEW: tell callee to pull & retag
       bump_version: true
       commit_bump: true
       bump_ref: refs/heads/main
