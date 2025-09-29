@@ -131,11 +131,12 @@ jobs:
       - name: Compose up (wait for health)
         env:
             APP_IMAGE: ${{ env.IMAGE_REF }}     # drives image: "${APP_IMAGE}" in compose
+            CI_COMPOSE: docker-compose.CI.yaml
         run: |
             set -euo pipefail
             # If you have docker-compose.e2e.yml, include it with -f
             docker compose \
-            -f docker-compose.yml \
+            -f ${{ env.CI_COMPOSE }} \
             up -d --no-build --wait
 
       - name: Smoke check
@@ -143,7 +144,7 @@ jobs:
             # If your app exposes 5000 on the host; otherwise curl service inside the net:
             curl -fsS --max-time 3 http://localhost:5000/health
 
-            
+
     #   - name: Pull CI image & tag for compose
     #     run: |
     #       set -euo pipefail
