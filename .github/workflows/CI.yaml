@@ -227,7 +227,7 @@ jobs:
             - name: SSH over SSM and run deploy
               shell: bash
               env:
-                IMAGE_URI: ${{ needs.publish.outputs.image_uri_versioned }}
+                IMAGE_URI: image
               run: |
                 set -euo pipefail
                 test -n "${IMAGE_URI}" || { echo "Empty IMAGE_URI from publish"; exit 3; }
