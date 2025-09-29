@@ -1,18 +1,34 @@
-name: "SSM Run"
-description: "Send AWS-RunShellScript and wait"
+name: SSM Run
+description: "Send AWS-RunShellScript and wait for completion"
+
 inputs:
-  aws-region: { required: true }
-  command:    { required: true }
-  instance-id:{ required: false }
-  targets:    { required: false } # JSON for SSM Targets
+  aws-region:
+    description: "AWS region (e.g., eu-central-1)"
+    required: true
+  command:
+    description: "Shell command to run on the instance(s)"
+    required: true
+  instance-id:
+    description: "Single EC2 instance ID (mutually exclusive with targets)"
+    required: false
+  targets:
+    description: "JSON array of SSM Targets (e.g., [{\"Key\":\"tag:Env\",\"Values\":[\"prod\"]}])"
+    required: false
+
 runs:
   using: "composite"
   steps:
-    - uses: actions/setup-python@v5
-      with: { python-version: "3.x" }
-    - shell: bash
-      run: pip install boto3
-    - shell: bash
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
+    - name: Install boto3
+      shell: bash
+      run: pip install --disable-pip-version-check --no-python-version-warning boto3
+
+    - name: Run SSM command
+      shell: bash
       env:
         AWS_REGION: ${{ inputs.aws-region }}
         INSTANCE_ID: ${{ inputs.instance-id }}
@@ -20,19 +36,33 @@ runs:
         COMMAND: ${{ inputs.command }}
       run: |
         python - <<'PY'
-        import os,time,ast,boto3
-        ssm=boto3.client("ssm",region_name=os.environ["AWS_REGION"])
-        args={"DocumentName":"AWS-RunShellScript",
-              "Parameters":{"commands":[os.environ["COMMAND"]]}}
-        if os.environ.get("INSTANCE_ID"):
-          args["InstanceIds"]=[os.environ["INSTANCE_ID"]]
-        elif os.environ.get("TARGETS"):
-          args["Targets"]=ast.literal_eval(os.environ["TARGETS"])
-        resp=ssm.send_command(**args); cid=resp["Command"]["CommandId"]
+        import os, time, ast, boto3
+        region = os.environ["AWS_REGION"]
+        cmd    = os.environ["COMMAND"]
+        inst   = os.environ.get("INSTANCE_ID")
+        tgts   = os.environ.get("TARGETS")
+
+        ssm = boto3.client("ssm", region_name=region)
+        args = {"DocumentName": "AWS-RunShellScript",
+                "Parameters": {"commands": [cmd]}}
+
+        if inst:
+            args["InstanceIds"] = [inst]
+        elif tgts:
+            # Expect JSON-like text; accept both JSON and Python-literal via ast
+            args["Targets"] = ast.literal_eval(tgts)
+        else:
+            raise SystemExit("Provide either 'instance-id' or 'targets'")
+
+        resp = ssm.send_command(**args)
+        cid = resp["Command"]["CommandId"]
+
+        term = {"Success","Failed","Cancelled","TimedOut"}
         while True:
-          inv=ssm.list_command_invocations(CommandId=cid,Details=True)["CommandInvocations"]
-          st=inv[0]["Status"] if inv else "Pending"
-          if st in {"Success","Failed","Cancelled","TimedOut"}: break
-          time.sleep(5)
-        print("Status:",st); raise SystemExit(0 if st=="Success" else 1)
+            inv = ssm.list_command_invocations(CommandId=cid, Details=True)["CommandInvocations"]
+            status = inv[0]["Status"] if inv else "Pending"
+            if status in term:
+                print(f"Status: {status}")
+                raise SystemExit(0 if status == "Success" else 1)
+            time.sleep(5)
         PY
