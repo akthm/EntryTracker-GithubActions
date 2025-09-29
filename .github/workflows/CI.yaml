@@ -49,24 +49,17 @@ jobs:
 
 
       - name: Compute IMAGE_REF (GHCR)
-        id: out
-        shell: bash
-        run: |
-          set -euo pipefail
-          # ghcr requires lowercase path
-          OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')
-          TAG="sha-${GITHUB_SHA::7}"
-          echo "IMAGE_REF=ghcr.io/${OWNER}/${REPO}:${TAG}" >> "$GITHUB_ENV"
-            {
-            echo "image_ref<<EOF"
-            echo "$IMAGE_REF"
-            echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-
-            # debug
-            echo "Wrote to GITHUB_OUTPUT at: $GITHUB_OUTPUT"
-            cat "$GITHUB_OUTPUT"
+        id: compute_image
+        uses: actions/github-script@v7
+        with:
+            script: |
+                const owner = process.env.GITHUB_REPOSITORY_OWNER.toLowerCase();
+                const repo  = process.env.GITHUB_REPOSITORY.split('/')[1].toLowerCase();
+                const tag   = 'sha-' + process.env.GITHUB_SHA.substring(0,7);
+                const ref   = `ghcr.io/${owner}/${repo}:${tag}`;
+                core.exportVariable('IMAGE_REF', ref);
+                core.setOutput('image_ref', ref);
+                core.info(`IMAGE_REF=${ref}`);
 
       - name: Assert & log image ref
         shell: bash
