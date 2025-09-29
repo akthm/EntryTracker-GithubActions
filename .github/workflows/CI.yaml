@@ -182,51 +182,65 @@ jobs:
 #       # aws_role_to_assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-ECR-Public  # if using OIDC
 #     secrets: inherit
     
-  deploy-staging-test:
-#    needs: publish
-#    if: ${{ success() && github.ref == 'refs/heads/main' }}
-   runs-on: self-hosted
-   env:
-    AWS_REGION: ap-south-1
-   permissions:
-     id-token: write        # if using OIDC to assume role
-     contents: read
-   steps:
-    - name: Configure AWS (OIDC)
+deploy-staging-ssh-ssm:
+#   needs: publish
+#   if: ${{ success() && github.ref == 'refs/heads/main' }}
+  runs-on: ubuntu-latest
+  permissions:
+    id-token: write      # for OIDC to assume your AWS role
+    contents: read
+  steps:
+    - name: Configure AWS
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-region: ${{ env.AWS_REGION }}
-    - name: List SSM 
-      run: | 
-        aws sts get-caller-identity
+        role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-SSM
+        aws-region: ap-south-1
 
-        # is my EC2 instance in this region and properly tagged?
-        aws ec2 describe-instances \
-        --region "$AWS_REGION" \
-        --filters "Name=tag:Name,Values=staging-host" "Name=instance-state-name,Values=running" \
-        --query 'Reservations[].Instances[].{Id:InstanceId,Tags:Tags,AZ:Placement.AvailabilityZone}' \
-        --output table
-
-        # is the instance registered & online in SSM?
-        aws ssm describe-instance-information \
-        --region "$AWS_REGION" \
-        --filters Key=ResourceType,Value=EC2Instance Key=PingStatus,Value=Online \
-        --query 'InstanceInformationList[].{Id:InstanceId,Platform:PlatformName,Agent:AgentVersion,IP:IPAddress}' \
-         --output table
-         
-    - name: Deploy via SSM
+    - name: Resolve staging instance-id
+      shell: bash
       run: |
         set -euo pipefail
-        IMAGE_URI="${{ needs.publish.outputs.image_uri_versioned }}"
-        TARGET_TAG="${IMAGE_URI##*:}"
-        echo "Deploying $IMAGE_URI to staging via SSM"
+        IID="$(aws ec2 describe-instances \
+          --filters 'Name=tag:Name,Values=staging-host' 'Name=instance-state-name,Values=running' \
+          --query 'Reservations[].Instances[].InstanceId' --output text)"
+        test -n "$IID" || { echo "No running instance tagged Name=staging-host"; exit 2; }
+        echo "INSTANCE_ID=$IID" >> "$GITHUB_ENV"
 
-        PARAMS="$(jq -n --arg img "$IMAGE_URI" '{commands: ["/opt/staging/blue_green_deploy.sh \($img)"]}')"
-        TARGETS='[{"Key":"tag:Name","Values":["staging-host"]}]'
+    - name: Install session-manager-plugin
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v session-manager-plugin >/dev/null 2>&1; then
+          # Debian/Ubuntu
+          if sudo apt-get update && sudo apt-get install -y session-manager-plugin; then
+            :
+          else
+            # Fallback to .deb from AWS if repo package isn't available
+            curl -fsSL -o /tmp/ssm-plugin.deb https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+            sudo dpkg -i /tmp/ssm-plugin.deb
+          fi
+        fi
+        session-manager-plugin --version
 
-        aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "$TARGETS" \
-            --parameters "$PARAMS" \
-            --timeout-seconds 600 \
-            --region "$AWS_REGION"
+    - name: SSH over SSM and run deploy
+      shell: bash
+      env:
+        IMAGE_URI: ${{ needs.publish.outputs.image_uri_versioned }}
+      run: |
+        set -euo pipefail
+        test -n "${IMAGE_URI}" || { echo "Empty IMAGE_URI from publish"; exit 3; }
+
+        # Optional: write a minimal SSH config for SSM proxy
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        cat > ~/.ssh/config <<'EOF'
+        Host i-*
+          User ec2-user
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+          ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=22"
+        EOF
+        chmod 600 ~/.ssh/config
+
+        echo "Deploying ${IMAGE_URI} to ${INSTANCE_ID} via SSH over SSM…"
+        # Run your script on the instance. Use sudo if your script requires root.
+        ssh -tt "${INSTANCE_ID}" "sudo /opt/staging/blue_green_deploy.sh '${IMAGE_URI}'"
