@@ -181,3 +181,33 @@ jobs:
       bump_ref: refs/heads/main
       # aws_role_to_assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-ECR-Public  # if using OIDC
     secrets: inherit
+    
+  deploy-staging:
+   needs: publish
+   if: ${{ success() && github.ref == 'refs/heads/main' }}
+   runs-on: self-hosted
+   env:
+    AWS_REGION: ap-south-1
+   permissions:
+     id-token: write        # if using OIDC to assume role
+     contents: read
+   steps:
+    - name: Configure AWS (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy via SSM
+      run: |
+        set -euo pipefail
+        IMAGE_URI="${{ needs.publish.outputs.image_uri_versioned }}"
+        TARGET_TAG="${IMAGE_URI##*:}"
+        echo "Deploying $IMAGE_URI to staging via SSM"
+
+        aws ssm send-command \
+          --document-name "AWS-RunShellScript" \
+          --comment "Blue/Green deploy $TARGET_TAG" \
+          --targets "Key=tag:Name,Values=staging-host" \
+          --parameters commands=["/opt/staging/blue_green_deploy.sh '$IMAGE_URI'"] \
+          --timeout-seconds 600 \
+          --region ${{ env.AWS_REGION }}
