@@ -188,6 +188,7 @@ jobs:
         runs-on: self-hosted
         env:
             AWS_REGION: ap-south-1
+            STAGE_HOST_NAME: stage-host
         permissions:
             id-token: write      # for OIDC to assume your AWS role
             contents: read
@@ -205,7 +206,7 @@ jobs:
                 IID="$(aws ec2 describe-instances \
                 --filters 'Name=tag:Name,Values=staging-host' 'Name=instance-state-name,Values=running' \
                 --query 'Reservations[].Instances[].InstanceId' --output text)"
-                test -n "$IID" || { echo "No running instance tagged Name=staging-host"; exit 2; }
+                test -n "$IID" || { echo "No running instance tagged Name=${{env.STAGE_HOST_NAME}}"; exit 2; }
                 echo "INSTANCE_ID=$IID" >> "$GITHUB_ENV"
 
             - name: Install session-manager-plugin
