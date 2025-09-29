@@ -194,7 +194,7 @@ jobs:
             - name: Configure AWS
               uses: aws-actions/configure-aws-credentials@v4
               with:
-                role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-SSM
+
                 aws-region: ap-south-1
 
             - name: Resolve staging instance-id
