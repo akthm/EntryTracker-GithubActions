@@ -212,14 +212,13 @@ jobs:
             - name: Deploy over SSM (no SSH)
               env:
                 INSTANCE_ID: i-05226b03d9617ffe4
-              uses: peterkimzz/aws-ssm-send-command@v1.1.1
+              uses: ./.github/actions/ssm-run
               with:
                 aws-region: ${{ env.AWS_REGION }}
-                instance-ids: ${{ env.INSTANCE_ID }}
-                comment: "Blue/green deploy from GitHub Actions"
-                working-directory: /
-                command: |
-                    sudo /opt/staging/blue_green_deploy.sh '${IMAGE_URI}'
+                instance-id: ${{ env.INSTANCE_ID }}   # or:
+                # targets: '[{"Key":"tag:Env","Values":["prod"]},{"Key":"tag:Role","Values":["web"]}]'
+                command: "sudo /opt/staging/blue_green_deploy.sh '${{ env.IMAGE_URI }}'"
+
 
             # - name: Install session-manager-plugin
             #   shell: bash

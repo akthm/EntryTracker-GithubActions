@@ -1,0 +1,38 @@
+name: "SSM Run"
+description: "Send AWS-RunShellScript and wait"
+inputs:
+  aws-region: { required: true }
+  command:    { required: true }
+  instance-id:{ required: false }
+  targets:    { required: false } # JSON for SSM Targets
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with: { python-version: "3.x" }
+    - shell: bash
+      run: pip install boto3
+    - shell: bash
+      env:
+        AWS_REGION: ${{ inputs.aws-region }}
+        INSTANCE_ID: ${{ inputs.instance-id }}
+        TARGETS: ${{ inputs.targets }}
+        COMMAND: ${{ inputs.command }}
+      run: |
+        python - <<'PY'
+        import os,time,ast,boto3
+        ssm=boto3.client("ssm",region_name=os.environ["AWS_REGION"])
+        args={"DocumentName":"AWS-RunShellScript",
+              "Parameters":{"commands":[os.environ["COMMAND"]]}}
+        if os.environ.get("INSTANCE_ID"):
+          args["InstanceIds"]=[os.environ["INSTANCE_ID"]]
+        elif os.environ.get("TARGETS"):
+          args["Targets"]=ast.literal_eval(os.environ["TARGETS"])
+        resp=ssm.send_command(**args); cid=resp["Command"]["CommandId"]
+        while True:
+          inv=ssm.list_command_invocations(CommandId=cid,Details=True)["CommandInvocations"]
+          st=inv[0]["Status"] if inv else "Pending"
+          if st in {"Success","Failed","Cancelled","TimedOut"}: break
+          time.sleep(5)
+        print("Status:",st); raise SystemExit(0 if st=="Success" else 1)
+        PY
