@@ -19,7 +19,7 @@ jobs:
       image_ref: ${{ steps.out.outputs.image_ref }}
     steps:
       - uses: actions/checkout@v4
-        
+
       - uses: actions/setup-python@v5
         with:
             python-version: "3.12"
@@ -44,6 +44,11 @@ jobs:
         run: | 
             set -euo pipefail
             pytest -q
+
+      - name: venv deactivate
+        run: |
+            deactivate
+
 
 
       - name: Compute IMAGE_REF (GHCR)
@@ -79,8 +84,8 @@ jobs:
 
       - name: log env 
         run: |
-            echo GO =  $GITHUB_OUTPUT
-            echo E - $GITHUB_ENV
+            echo GO =  $(cat $GITHUB_OUTPUT)
+            echo E - $(cat $GITHUB_ENV)
 
       - name: cleanup venv
         if: always()
