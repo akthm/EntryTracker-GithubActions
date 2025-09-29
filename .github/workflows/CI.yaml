@@ -185,7 +185,7 @@ jobs:
     deploy-staging-ssh-ssm:
     #   needs: publish
     #   if: ${{ success() && github.ref == 'refs/heads/main' }}
-        runs-on: self-hosted
+        runs-on: ubuntu-latest
         env:
             AWS_REGION: ap-south-1
             STAGE_HOST_NAME: stage-host
