@@ -196,7 +196,24 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: ${{ env.AWS_REGION }}
+    - name: List SSM 
+      run: | 
+        aws sts get-caller-identity
 
+        # is my EC2 instance in this region and properly tagged?
+        aws ec2 describe-instances \
+        --region "$AWS_REGION" \
+        --filters "Name=tag:Name,Values=staging-host" "Name=instance-state-name,Values=running" \
+        --query 'Reservations[].Instances[].{Id:InstanceId,Tags:Tags,AZ:Placement.AvailabilityZone}' \
+        --output table
+
+        # is the instance registered & online in SSM?
+        aws ssm describe-instance-information \
+        --region "$AWS_REGION" \
+        --filters Key=ResourceType,Value=EC2Instance Key=PingStatus,Value=Online \
+        --query 'InstanceInformationList[].{Id:InstanceId,Platform:PlatformName,Agent:AgentVersion,IP:IPAddress}' \
+         --output table
+         
     - name: Deploy via SSM
       run: |
         set -euo pipefail
