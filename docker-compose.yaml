@@ -1,8 +1,8 @@
 version: '3.8'
 
 services:
-  web:
-    build: .
+  app:
+    image: "${APP_IMAGE:?APP_IMAGE not set}"
     container_name: flask-app
     environment:
       - DB_HOST=${DB_HOST}    # change this when replacing MySQL contianer with another database
@@ -16,6 +16,8 @@ services:
           condition: "service_healthy"
     networks:
       - app_network
+    deploy:
+      restart_policy: { condition: none }
 
   mysql:
     image: mysql:5.7

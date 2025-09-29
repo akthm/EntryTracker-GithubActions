@@ -121,29 +121,52 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Log env
         run: echo ${{ env.IMAGE_REF }}
-      - name: Pull CI image & tag for compose
-        run: |
-          set -euo pipefail
-          docker pull "$IMAGE_REF"
-          # If your compose references 'app:build', retag to satisfy it:
-          docker tag "$IMAGE_REF" app:build
 
-      - name: End-to-end test (compose with health)
-        shell: bash
+      - name: Pull image by digest (no rebuild)
         run: |
             set -euo pipefail
-            docker compose up -d --quiet-pull
-            for i in {1..60}; do
-            if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
-                echo "App is healthy ✅"
-                break
-            fi
-            echo "Waiting for app… ($i/60)"
-            sleep 2
-            done
+            docker pull "$IMAGE_REF"
+            docker inspect "$IMAGE_REF" >/dev/null
 
-            # Final check (fails the step if not healthy)
-            curl -fsS http://localhost:5000
+      - name: Compose up (wait for health)
+        env:
+            APP_IMAGE: ${{ env.IMAGE_REF }}     # drives image: "${APP_IMAGE}" in compose
+        run: |
+            set -euo pipefail
+            # If you have docker-compose.e2e.yml, include it with -f
+            docker compose \
+            -f docker-compose.yml \
+            up -d --no-build --wait
+
+      - name: Smoke check
+        run: |
+            # If your app exposes 5000 on the host; otherwise curl service inside the net:
+            curl -fsS --max-time 3 http://localhost:5000/health
+
+            
+    #   - name: Pull CI image & tag for compose
+    #     run: |
+    #       set -euo pipefail
+    #       docker pull "$IMAGE_REF"
+    #       # If your compose references 'app:build', retag to satisfy it:
+    #       docker tag "$IMAGE_REF" app:build
+
+    #   - name: End-to-end test (compose with health)
+    #     shell: bash
+    #     run: |
+    #         set -euo pipefail
+    #         docker compose up -d --quiet-pull
+    #         for i in {1..60}; do
+    #         if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
+    #             echo "App is healthy ✅"
+    #             break
+    #         fi
+    #         echo "Waiting for app… ($i/60)"
+    #         sleep 2
+    #         done
+
+    #         # Final check (fails the step if not healthy)
+    #         curl -fsS http://localhost:5000
 
       - name: Set image ref output (e2e)
         id: out_image

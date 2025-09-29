@@ -26,7 +26,24 @@ runs:
     - name: Install boto3
       shell: bash
       run: pip install --disable-pip-version-check --no-python-version-warning boto3
+    
+    - name: Debug 
+      run: |
+        aws sts get-caller-identity
 
+        # 2) Does the EC2 instance exist in THIS account/region?
+        aws ec2 describe-instances \
+          --region "$AWS_REGION" \
+          --instance-ids "$INSTANCE_ID" \
+          --query 'Reservations[].Instances[].State.Name'
+
+        # 3) Is it registered with SSM in THIS account/region?
+        aws ssm describe-instance-information \
+          --region "$AWS_REGION" \
+          --query "InstanceInformationList[?InstanceId=='$INSTANCE_ID'].[InstanceId,PingStatus,PlatformName]" \
+          --output table
+
+          
     - name: Run SSM command
       shell: bash
       env:
