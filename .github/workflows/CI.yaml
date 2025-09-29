@@ -204,10 +204,12 @@ jobs:
         TARGET_TAG="${IMAGE_URI##*:}"
         echo "Deploying $IMAGE_URI to staging via SSM"
 
+        PARAMS="$(jq -n --arg img "$IMAGE_URI" '{commands: ["/opt/staging/blue_green_deploy.sh \($img)"]}')"
+        TARGETS='[{"Key":"tag:Name","Values":["staging-host"]}]'
+
         aws ssm send-command \
-          --document-name "AWS-RunShellScript" \
-          --comment "Blue/Green deploy $TARGET_TAG" \
-          --targets "Key=tag:Name,Values=staging-host" \
-          --parameters commands=["/opt/staging/blue_green_deploy.sh '$IMAGE_URI'"] \
-          --timeout-seconds 600 \
-          --region ${{ env.AWS_REGION }}
+            --document-name "AWS-RunShellScript" \
+            --targets "$TARGETS" \
+            --parameters "$PARAMS" \
+            --timeout-seconds 600 \
+            --region "$AWS_REGION"
