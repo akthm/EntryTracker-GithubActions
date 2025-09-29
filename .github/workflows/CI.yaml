@@ -185,7 +185,9 @@ jobs:
     deploy-staging-ssh-ssm:
     #   needs: publish
     #   if: ${{ success() && github.ref == 'refs/heads/main' }}
-        runs-on: ubuntu-latest
+        runs-on: self-hosted
+        env:
+            AWS_REGION: ap-south-1
         permissions:
             id-token: write      # for OIDC to assume your AWS role
             contents: read
@@ -194,8 +196,7 @@ jobs:
             - name: Configure AWS
               uses: aws-actions/configure-aws-credentials@v4
               with:
-
-                aws-region: ap-south-1
+                aws-region: ${{ env.AWS_REGION }}
 
             - name: Resolve staging instance-id
               shell: bash
