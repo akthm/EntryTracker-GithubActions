@@ -204,7 +204,7 @@ jobs:
               run: |
                 set -euo pipefail
                 IID="$(aws ec2 describe-instances \
-                --filters 'Name=tag:Name,Values=staging-host' 'Name=instance-state-name,Values=running' \
+                --filters 'Name=tag:Name,Values=${{env.STAGE_HOST_NAME}}' 'Name=instance-state-name,Values=running' \
                 --query 'Reservations[].Instances[].InstanceId' --output text)"
                 test -n "$IID" || { echo "No running instance tagged Name=${{env.STAGE_HOST_NAME}}"; exit 2; }
                 echo "INSTANCE_ID=$IID" >> "$GITHUB_ENV"
