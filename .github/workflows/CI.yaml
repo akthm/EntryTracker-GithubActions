@@ -193,7 +193,7 @@ jobs:
             id-token: write      # for OIDC to assume your AWS role
             contents: read
         steps:
-
+            - uses: actions/checkout@v4
             - name: Configure AWS
               uses: aws-actions/configure-aws-credentials@v4
               with:
