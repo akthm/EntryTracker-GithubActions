@@ -141,8 +141,17 @@ jobs:
 
       - name: Smoke check
         run: |
-            # If your app exposes 5000 on the host; otherwise curl service inside the net:
-            curl -fsS --max-time 3 http://localhost:5000/health
+            for i in {1..60}; do
+            if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
+                echo "App is healthy ✅"
+                break
+            fi
+            echo "Waiting for app… ($i/60)"
+            sleep 2
+            done
+
+            # Final check (fails the step if not healthy)
+            curl -fsS http://localhost:5000
 
 
     #   - name: Pull CI image & tag for compose
