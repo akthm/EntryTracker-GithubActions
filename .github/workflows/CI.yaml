@@ -10,214 +10,215 @@ env:
   PUBLIC_REGISTRY_ALIAS: u9j9o0m9
   PUBLIC_ECR_REPO: entry-tracker
 jobs:
-#   unit-test-build:
-#     runs-on: self-hosted
-#     permissions:
-#       contents: read
-#       packages: write     # push to GHCR
-#     outputs:
-#       image_ref: ${{ steps.compute_image.outputs.image_ref }}
-#     steps:
-#       - uses: actions/checkout@v4
+  unit-test-build:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write     # push to GHCR
+    outputs:
+      image_ref: ${{ steps.compute_image.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
 
-#       - uses: actions/setup-python@v5
-#         with:
-#             python-version: "3.12"
-#             cache: "pip"
-
-
-#       - name: Create venv & install deps
-#         shell: bash
-#         run: |
-#             set -euo pipefail
-#             python -m venv .venv
-#             source .venv/bin/activate
-#             python -m pip install --upgrade pip
-#             if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
-#             pip install -U pytest pytest-cov
-#             echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-#             python -c "import sys; print('Python:', sys.executable)"
-#             pytest --version
+      - uses: actions/setup-python@v5
+        with:
+            python-version: "3.12"
+            cache: "pip"
 
 
-#       - name: unit test app
-#         run: | 
-#             set -euo pipefail
-#             pytest -q
+      - name: Create venv & install deps
+        shell: bash
+        run: |
+            set -euo pipefail
+            python -m venv .venv
+            source .venv/bin/activate
+            python -m pip install --upgrade pip
+            if [[ -f requirements.txt ]]; then pip install -r requirements.txt; fi
+            pip install -U pytest pytest-cov
+            echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+            python -c "import sys; print('Python:', sys.executable)"
+            pytest --version
+
+
+      - name: unit test app
+        run: | 
+            set -euo pipefail
+            pytest -q
 
 
 
 
-#       - name: Compute IMAGE_REF (GHCR)
-#         id: compute_image
-#         uses: actions/github-script@v7
-#         with:
-#             script: |
-#                 const owner = process.env.GITHUB_REPOSITORY_OWNER.toLowerCase();
-#                 const repo  = process.env.GITHUB_REPOSITORY.split('/')[1].toLowerCase();
-#                 const tag   = 'sha-' + process.env.GITHUB_SHA.substring(0,7);
-#                 const ref   = `ghcr.io/${owner}/${repo}:${tag}`;
-#                 core.exportVariable('IMAGE_REF', ref);
-#                 core.setOutput('image_ref', ref);
-#                 core.info(`IMAGE_REF=${ref}`);
+      - name: Compute IMAGE_REF (GHCR)
+        id: compute_image
+        uses: actions/github-script@v7
+        with:
+            script: |
+                const owner = process.env.GITHUB_REPOSITORY_OWNER.toLowerCase();
+                const repo  = process.env.GITHUB_REPOSITORY.split('/')[1].toLowerCase();
+                const tag   = 'sha-' + process.env.GITHUB_SHA.substring(0,7);
+                const ref   = `ghcr.io/${owner}/${repo}:${tag}`;
+                core.exportVariable('IMAGE_REF', ref);
+                core.setOutput('image_ref', ref);
+                core.info(`IMAGE_REF=${ref}`);
 
-#       - name: Assert & log image ref
-#         shell: bash
-#         run: |
-#           set -euo pipefail
-#           echo "steps.compute_image.outputs.image_ref='${{ steps.compute_image.outputs.image_ref }}'"
-#           echo "env.IMAGE_REF='${IMAGE_REF}'"
-#           test -n "${{ steps.compute_image.outputs.image_ref }}" || { echo "EMPTY image_ref"; exit 1; }
-
-
-#       - name: Login to GHCR
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ghcr.io
-#           username: ${{ github.actor }}
-#           password: ${{ secrets.GITHUB_TOKEN }}
-
-#       - name: Setup Buildx
-#         uses: docker/setup-buildx-action@v3
-
-#       - name: Build & push (cached)
-#         uses: docker/build-push-action@v6
-#         with:
-#           context: .
-#           push: true
-#           tags: ${{ env.IMAGE_REF }}
-#           cache-from: type=gha
-#           cache-to: type=gha,mode=max
-
-#       - name: log env 
-#         run: |
-#             echo GO =  $(cat $GITHUB_OUTPUT)
-#             echo E - $(cat $GITHUB_ENV)
-
-#       - name: cleanup venv
-#         if: always()
-#         run: rm -rf .venv
-
-#   test-e2e:
-#     needs: unit-test-build
-#     runs-on: self-hosted
-
-#     permissions:
-#       contents: read
-#       packages: read      # pull from GHCR
-#     env:
-#       IMAGE_REF: ${{ needs.unit-test-build.outputs.image_ref }}
-#       COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}
-#     outputs:
-#         image_ref: ${{ steps.out_image.outputs.image_ref }}
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Login to GHCR
-#         uses: docker/login-action@v3
-#         with:
-#           registry: ghcr.io
-#           username: ${{ github.actor }}
-#           password: ${{ secrets.GITHUB_TOKEN }}
-#       - name: Log env
-#         run: echo ${{ env.IMAGE_REF }}
-#       - name: Pull CI image & tag for compose
-#         run: |
-#           set -euo pipefail
-#           docker pull "$IMAGE_REF"
-#           # If your compose references 'app:build', retag to satisfy it:
-#           docker tag "$IMAGE_REF" app:build
-
-#       - name: End-to-end test (compose with health)
-#         shell: bash
-#         run: |
-#             set -euo pipefail
-#             docker compose up -d --quiet-pull
-#             for i in {1..60}; do
-#             if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
-#                 echo "App is healthy ✅"
-#                 break
-#             fi
-#             echo "Waiting for app… ($i/60)"
-#             sleep 2
-#             done
-
-#             # Final check (fails the step if not healthy)
-#             curl -fsS http://localhost:5000
-
-#       - name: Set image ref output (e2e)
-#         id: out_image
-#         shell: bash
-#         run: echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+      - name: Assert & log image ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "steps.compute_image.outputs.image_ref='${{ steps.compute_image.outputs.image_ref }}'"
+          echo "env.IMAGE_REF='${IMAGE_REF}'"
+          test -n "${{ steps.compute_image.outputs.image_ref }}" || { echo "EMPTY image_ref"; exit 1; }
 
 
-#       - name: Dump logs on failure
-#         if: failure()
-#         run: |
-#           docker compose ps
-#           docker compose logs --no-color --timestamps
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-#       - name: Teardown
-#         if: always()
-#         run: docker compose down -v --remove-orphans
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
 
-#   publish:
-#     needs: test-e2e
-#     if: ${{ success() && github.event_name == 'push' }}
+      - name: Build & push (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_REF }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: log env 
+        run: |
+            echo GO =  $(cat $GITHUB_OUTPUT)
+            echo E - $(cat $GITHUB_ENV)
+
+      - name: cleanup venv
+        if: always()
+        run: rm -rf .venv
+
+  test-e2e:
+    needs: unit-test-build
+    runs-on: self-hosted
+
+    permissions:
+      contents: read
+      packages: read      # pull from GHCR
+    env:
+      IMAGE_REF: ${{ needs.unit-test-build.outputs.image_ref }}
+      COMPOSE_PROJECT_NAME: e2e-${{ github.run_id }}
+    outputs:
+        image_ref: ${{ steps.out_image.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log env
+        run: echo ${{ env.IMAGE_REF }}
+      - name: Pull CI image & tag for compose
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE_REF"
+          # If your compose references 'app:build', retag to satisfy it:
+          docker tag "$IMAGE_REF" app:build
+
+      - name: End-to-end test (compose with health)
+        shell: bash
+        run: |
+            set -euo pipefail
+            docker compose up -d --quiet-pull
+            for i in {1..60}; do
+            if curl -fsS --max-time 2 http://localhost:5000 >/dev/null; then
+                echo "App is healthy ✅"
+                break
+            fi
+            echo "Waiting for app… ($i/60)"
+            sleep 2
+            done
+
+            # Final check (fails the step if not healthy)
+            curl -fsS http://localhost:5000
+
+      - name: Set image ref output (e2e)
+        id: out_image
+        shell: bash
+        run: echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --timestamps
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  publish:
+    needs: test-e2e
+    if: ${{ success() && github.event_name == 'push' }}
     
-#     permissions:
-#       contents: write      # for optional VERSION commit
-#       id-token: write      # for AWS OIDC (if you use it)
-#       packages: read       # to pull from GHCR inside the callee
-#       actions: read
-#     uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
-#     with:
-#       public_registry_alias: u9j9o0m9
-#       public_ecr_repo: entry-tracker
-#       image_local_name: app:build
-#       image_pull_ref: ${{ needs.test-e2e.outputs.image_ref }}   # <— NEW: tell callee to pull & retag
-#       bump_version: true
-#       commit_bump: true
-#       bump_ref: refs/heads/main
-#       # aws_role_to_assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-ECR-Public  # if using OIDC
-#     secrets: inherit
+    permissions:
+      contents: write      # for optional VERSION commit
+      id-token: write      # for AWS OIDC (if you use it)
+      packages: read       # to pull from GHCR inside the callee
+      actions: read
+    uses: ./.github/workflows/publish-public-ecr-version-bump.yaml
+    with:
+      public_registry_alias: u9j9o0m9
+      public_ecr_repo: entry-tracker
+      image_local_name: app:build
+      image_pull_ref: ${{ needs.test-e2e.outputs.image_ref }}   # <— NEW: tell callee to pull & retag
+      bump_version: true
+      commit_bump: true
+      bump_ref: refs/heads/main
+      # aws_role_to_assume: arn:aws:iam::<ACCOUNT_ID>:role/GitHubActions-ECR-Public  # if using OIDC
+    secrets: inherit
     
-    deploy-staging-ssh-ssm:
-    #   needs: publish
-    #   if: ${{ success() && github.ref == 'refs/heads/main' }}
-        runs-on: self-hosted
-        env:
-            AWS_REGION: ap-south-1
-            STAGE_HOST_NAME: stage-host
-        permissions:
-            id-token: write      # for OIDC to assume your AWS role
-            contents: read
-        steps:
-            - uses: actions/checkout@v4
-            - name: Configure AWS
-              uses: aws-actions/configure-aws-credentials@v4
-              with:
-                aws-region: ${{ env.AWS_REGION }}
+  deploy-staging-ssh-ssm:
+    needs: publish
+    if: ${{ success() && github.ref == 'refs/heads/main' }}
+    runs-on: self-hosted
+    env:
+        AWS_REGION: ap-south-1
+        STAGE_HOST_NAME: stage-host
+        IMAGE_URI: ${{ needs.publish.outputs.image_uri_versioned }}
+    permissions:
+        id-token: write      # for OIDC to assume your AWS role
+        contents: read
+    steps:
+        - uses: actions/checkout@v4
+        - name: Configure AWS
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-region: ${{ env.AWS_REGION }}
 
-            - name: Resolve staging instance-id
-              shell: bash
-              run: |
-                set -euo pipefail
-                IID="$(aws ec2 describe-instances \
-                --filters 'Name=tag:Name,Values=${{env.STAGE_HOST_NAME}}' 'Name=instance-state-name,Values=running' \
-                --query 'Reservations[].Instances[].InstanceId' --output text)"
-                test -n "$IID" || { echo "No running instance tagged Name=${{env.STAGE_HOST_NAME}}"; exit 2; }
-                echo "INSTANCE_ID=$IID" >> "$GITHUB_ENV"
+        - name: Resolve staging instance-id
+          shell: bash
+          run: |
+            set -euo pipefail
+            IID="$(aws ec2 describe-instances \
+            --filters 'Name=tag:Name,Values=${{env.STAGE_HOST_NAME}}' 'Name=instance-state-name,Values=running' \
+            --query 'Reservations[].Instances[].InstanceId' --output text)"
+            test -n "$IID" || { echo "No running instance tagged Name=${{env.STAGE_HOST_NAME}}"; exit 2; }
+            echo "INSTANCE_ID=$IID" >> "$GITHUB_ENV"
 
-            - name: Deploy over SSM (no SSH)
-              env:
-                INSTANCE_ID: i-05226b03d9617ffe4
-              uses: ./.github/actions/ssm-run
-              with:
-                aws-region: ${{ env.AWS_REGION }}
-                instance-id: ${{ env.INSTANCE_ID }}   # or:
-                # targets: '[{"Key":"tag:Env","Values":["prod"]},{"Key":"tag:Role","Values":["web"]}]'
-                command: "sudo /opt/staging/blue_green_deploy.sh '${{ env.IMAGE_URI }}'"
+        - name: Deploy over SSM (no SSH)
+          env:
+            INSTANCE_ID: i-05226b03d9617ffe4
+          uses: ./.github/actions/ssm-run
+          with:
+            aws-region: ${{ env.AWS_REGION }}
+            instance-id: ${{ env.INSTANCE_ID }}   # or:
+            # targets: '[{"Key":"tag:Env","Values":["prod"]},{"Key":"tag:Role","Values":["web"]}]'
+            command: "sudo /opt/staging/blue_green_deploy.sh '${{ env.IMAGE_URI }}'"
 
 
             # - name: Install session-manager-plugin

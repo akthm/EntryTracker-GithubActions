@@ -1,6 +1,10 @@
 # Use Python base image
 FROM python:3.10-slim
 
+# Install curl for healthchecks, etc.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 # Set working directory
 WORKDIR /app
 
